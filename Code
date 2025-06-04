@@ -1,0 +1,101 @@
+// Notificações
+public interface INotificador
+{
+    void Notificar(string destinatario, string assunto, string mensagem);
+}
+
+public class EmailNotificador : INotificador
+{
+    public void Notificar(string destinatario, string assunto, string mensagem)
+    {
+        Console.WriteLine($"E-mail para {destinatario}: {assunto} - {mensagem}");
+    }
+}
+
+public class SMSNotificador : INotificador
+{
+    public void Notificar(string destinatario, string assunto, string mensagem)
+    {
+        Console.WriteLine($"SMS para {destinatario}: {mensagem}");
+    }
+}
+
+// Serviços
+public class CadastroService
+{
+    private List<Usuario> usuarios;
+    private INotificador notificador;
+
+    public CadastroService(List<Usuario> usuarios, INotificador notificador)
+    {
+        this.usuarios = usuarios;
+        this.notificador = notificador;
+    }
+
+    public void AdicionarUsuario(string nome, int id)
+    {
+        usuarios.Add(new Usuario { Nome = nome, ID = id });
+        notificador.Notificar(nome, "Bem-vindo", "Você foi cadastrado.");
+    }
+}
+
+public class EmprestimoService
+{
+    private List<Emprestimo> emprestimos;
+    private List<Livro> livros;
+    private List<Usuario> usuarios;
+    private List<INotificador> notificadores;
+
+    public EmprestimoService(List<Livro> livros, List<Usuario> usuarios, List<Emprestimo> emprestimos, List<INotificador> notificadores)
+    {
+        this.livros = livros;
+        this.usuarios = usuarios;
+        this.emprestimos = emprestimos;
+        this.notificadores = notificadores;
+    }
+
+    public bool RealizarEmprestimo(int usuarioId, string isbn, int dias)
+    {
+        var livro = livros.Find(l => l.ISBN == isbn);
+        var usuario = usuarios.Find(u => u.ID == usuarioId);
+
+        if (livro == null || usuario == null || !livro.Disponivel) return false;
+
+        livro.Disponivel = false;
+
+        var emprestimo = new Emprestimo
+        {
+            Livro = livro,
+            Usuario = usuario,
+            DataEmprestimo = DateTime.Now,
+            DataDevolucaoPrevista = DateTime.Now.AddDays(dias)
+        };
+
+        emprestimos.Add(emprestimo);
+
+        foreach (var notificador in notificadores)
+            notificador.Notificar(usuario.Nome, "Empréstimo", $"Livro: {livro.Titulo}");
+
+        return true;
+    }
+
+    public double RealizarDevolucao(string isbn, int usuarioId)
+    {
+        var emprestimo = emprestimos.Find(e => e.Livro.ISBN == isbn && e.Usuario.ID == usuarioId && e.DataDevolucaoEfetiva == null);
+        if (emprestimo == null) return -1;
+
+        emprestimo.Livro.Disponivel = true;
+        emprestimo.DataDevolucaoEfetiva = DateTime.Now;
+
+        double multa = 0;
+        if (emprestimo.DataDevolucaoEfetiva > emprestimo.DataDevolucaoPrevista)
+        {
+            multa = (emprestimo.DataDevolucaoEfetiva.Value - emprestimo.DataDevolucaoPrevista).Days * 1.0;
+
+            foreach (var notificador in notificadores)
+                notificador.Notificar(emprestimo.Usuario.Nome, "Multa por atraso", $"Multa: R$ {multa}");
+        }
+
+        return multa;
+    }
+}
